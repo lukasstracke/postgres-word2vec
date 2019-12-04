@@ -80,6 +80,24 @@ Datum cosine_similarity_bytea(PG_FUNCTION_ARGS) {
   PG_RETURN_FLOAT4(scalar);
 }
 
+PG_FUNCTION_INFO_V1(hamming_bytea);
+
+Datum hamming_bytea(PG_FUNCTION_ARGS) {
+  int dist = 0;
+  bytea* data1 = PG_GETARG_BYTEA_P(0);
+  bytea* data2 = PG_GETARG_BYTEA_P(1);
+  float4* v1 = NULL;
+  float4* v2 = NULL;
+  int size = 0;
+  convert_bytea_float4(data1, &v1, &size);
+  size = 0;
+  convert_bytea_float4(data2, &v2, &size);
+  for (int i = 0; i < size; i++) {
+    dist += (v1[i] == v2[i]) ? 0 : 1;
+  }
+  PG_RETURN_INT32(dist);
+}
+
 PG_FUNCTION_INFO_V1(vec_minus);
 
 Datum vec_minus(PG_FUNCTION_ARGS) {

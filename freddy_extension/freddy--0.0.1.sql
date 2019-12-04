@@ -302,6 +302,10 @@ CREATE OR REPLACE FUNCTION cosine_similarity_bytea(bytea, bytea) RETURNS float4
 AS '$libdir/freddy', 'cosine_similarity_bytea'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION hamming_bytea(bytea, bytea) RETURNS integer
+AS '$libdir/freddy', 'hamming_bytea'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION vec_minus(float[], float[]) RETURNS float[]
 AS '$libdir/freddy', 'vec_minus'
 LANGUAGE C IMMUTABLE STRICT;
