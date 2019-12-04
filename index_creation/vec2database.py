@@ -109,10 +109,15 @@ def main(argc, argv):
     password = db_config.get_value('password')
     host = db_config.get_value('host')
     db_name = db_config.get_value('db_name')
+    port = db_config.get_value('port')
+
+    args = "dbname='" + db_name + "' user='" + user + "' host='" + host + "' password='" + password + "'"
+    if port != "":
+        args = args + " port='" + port + "'"
 
     # init db connection
-    try:
-        con = psycopg2.connect("dbname='" + db_name + "' user='" + user + "' host='" + host + "' password='" + password + "'")
+    try:        
+        con = psycopg2.connect(args)
     except:
         logger.log(Logger.ERROR, 'Can not connect to database')
         return
