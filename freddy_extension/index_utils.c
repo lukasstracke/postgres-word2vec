@@ -1075,6 +1075,16 @@ void updateWordVectorsRelation(char* tableName, char** tokens,
 
 int compare(const void* a, const void* b) { return (*(int*)a - *(int*)b); }
 
+void convert_bytea_uint64(bytea* bstring, uint64_t** output, int* size) {
+  uint64_t* ptr = (uint64_t*)VARDATA(bstring);
+  if (*size == 0) {  // if size value is given it is assumed that memory is
+                     // already allocated
+    *output = palloc((VARSIZE(bstring) - VARHDRSZ));
+    *size = (VARSIZE(bstring) - VARHDRSZ) / sizeof(uint64_t);
+  }
+  memcpy(*output, ptr, (*size) * sizeof(uint64_t));
+}
+
 void convert_bytea_int32(bytea* bstring, int32** output, int* size) {
   int32* ptr = (int32*)VARDATA(bstring);
   if (*size == 0) {  // if size value is given it is assumed that memory is
@@ -1109,6 +1119,12 @@ void convert_float4_bytea(float4* input, bytea** output, int size) {
   *output = (text*)palloc(size * sizeof(float4) + VARHDRSZ);
   SET_VARSIZE(*output, VARHDRSZ + size * sizeof(float4));
   memcpy(VARDATA(*output), input, size * sizeof(float4));
+}
+
+void convert_int64_bytea(int64* input, bytea** output, int size) {
+  *output = (text*)palloc(size * sizeof(int64) + VARHDRSZ);
+  SET_VARSIZE(*output, VARHDRSZ + size * sizeof(int64));
+  memcpy(VARDATA(*output), input, size * sizeof(int64));
 }
 
 void convert_int32_bytea(int32* input, bytea** output, int size) {

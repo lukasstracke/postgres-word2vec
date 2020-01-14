@@ -218,9 +218,13 @@ int compare(const void* a, const void* b);
 
 void convert_bytea_int32(bytea* bstring, int32** output, int32* size);
 
+void convert_bytea_uint64(bytea* bstring, uint64_t** output, int32* size);
+
 void convert_bytea_int16(bytea* bstring, int16** output, int* size);
 
 void convert_bytea_float4(bytea* bstring, float4** output, int* size);
+
+void convert_int64_bytea(int64* input, bytea** output, int size);
 
 void convert_int32_bytea(int32* input, bytea** output, int size);
 

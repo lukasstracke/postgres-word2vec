@@ -2088,6 +2088,14 @@ Datum vec_to_bytea(PG_FUNCTION_ARGS) {
       }
       convert_float4_bytea(vector, &out, n);
     } break;
+    case INT8OID: {
+      int64* vector = palloc(n * sizeof(int64));
+      ;
+      for (int j = 0; j < n; j++) {
+        vector[j] = DatumGetInt64(vectorData[j]);
+      }
+      convert_int64_bytea(vector, &out, n);
+    } break;
     case INT4OID: {
       int32* vector = palloc(n * sizeof(int32));
       ;

@@ -14,6 +14,8 @@
 
 #include "index_utils.h"
 
+#include <inttypes.h>
+
 // clang-format on
 
 #ifdef PG_MODULE_MAGIC
@@ -80,20 +82,35 @@ Datum cosine_similarity_bytea(PG_FUNCTION_ARGS) {
   PG_RETURN_FLOAT4(scalar);
 }
 
+PG_FUNCTION_INFO_V1(print_bytea_bitvec);
+
+Datum print_bytea_bitvec(PG_FUNCTION_ARGS) {
+  bytea* data = PG_GETARG_BYTEA_P(0);
+  uint64_t* vec = NULL;
+  int size = 0;
+  convert_bytea_uint64(data, &vec, &size);
+  for (int i = 0; i < size; i++) {
+    elog(INFO, "%" PRIu64 "", vec[i]);
+  }
+  PG_RETURN_NULL();
+}
+
 PG_FUNCTION_INFO_V1(hamming_bytea);
 
 Datum hamming_bytea(PG_FUNCTION_ARGS) {
   int dist = 0;
+  int bitvec_xor = 0;
   bytea* data1 = PG_GETARG_BYTEA_P(0);
   bytea* data2 = PG_GETARG_BYTEA_P(1);
-  float4* v1 = NULL;
-  float4* v2 = NULL;
+  uint64_t* v1 = NULL;
+  uint64_t* v2 = NULL;
   int size = 0;
-  convert_bytea_float4(data1, &v1, &size);
+  convert_bytea_uint64(data1, &v1, &size);
   size = 0;
-  convert_bytea_float4(data2, &v2, &size);
+  convert_bytea_uint64(data2, &v2, &size);
   for (int i = 0; i < size; i++) {
-    dist += (v1[i] == v2[i]) ? 0 : 1;
+    bitvec_xor = v1[i] ^ v2[i]; // identify differing bits
+    dist += __builtin_popcountll(bitvec_xor); // count bits
   }
   PG_RETURN_INT32(dist);
 }
