@@ -33,12 +33,15 @@ def float_to_bitvec(vector):
     for index in range(0, len(vector) - 1):
         num = int(index / maxbits_per_num)
         bitvec[num] *= np.uint64(2)
-        bitvec[num] += np.uint64(1) if (float(vector[index]) > 0) else np.uint64(0)
+        try:
+            bitvec[num] += np.uint64(1) if (float(vector[index]) > 0) else np.uint64(0)
+        except:
+            return None
     # print(bitvec)
     return psycopg2.Binary(bitvec)
 
-def insert_vectors(filename, con, cur, table_name, batch_size, logger):
-    f = open(filename)
+def insert_vectors(filename, con, cur, table_name, batch_size, insert_limit, logger):
+    f = open(filename, encoding='utf-8')
     (_, size) = f.readline().split()
     d = int(size)
     count = 1
@@ -58,6 +61,8 @@ def insert_vectors(filename, con, cur, table_name, batch_size, logger):
             con.commit()
             logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
             values = []
+        if count-1 == insert_limit:
+            break
 
         count+= 1
         line = f.readline()
@@ -96,11 +101,12 @@ def main(argc, argv):
         logger.log(Logger.ERROR, 'Can not connect to database')
         return
 
+    con.set_client_encoding('UTF8')
     cur = con.cursor()
 
     init_tables(con, cur, vec_config.get_value('table_name'), logger)
 
-    insert_vectors(vec_config.get_value('vec_file_path'), con, cur, vec_config.get_value('table_name'), db_config.get_value('batch_size'), logger)
+    insert_vectors(vec_config.get_value('vec_file_path'), con, cur, vec_config.get_value('table_name'), db_config.get_value('batch_size'), vec_config.get_value('insert_limit'), logger)
 
     # commit changes
     con.commit()
