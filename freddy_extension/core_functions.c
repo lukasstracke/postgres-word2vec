@@ -109,8 +109,8 @@ Datum hamming_bytea(PG_FUNCTION_ARGS) {
   size = 0;
   convert_bytea_uint64(data2, &v2, &size);
   for (int i = 0; i < size; i++) {
-    bitvec_xor = v1[i] ^ v2[i]; // identify differing bits
-    dist += __builtin_popcountll(bitvec_xor); // count bits
+    bitvec_xor = v1[i] ^ v2[i];                 // identify differing bits
+    dist += __builtin_popcountll(bitvec_xor);   // count bits
   }
   PG_RETURN_INT32(dist);
 }
