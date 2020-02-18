@@ -55,7 +55,7 @@ def serialize_as_norm_array(array):
     return output[:-1] + '}'
 
 def insert_vectors(filename, con, cur, table_name, batch_size, normalized, logger):
-    f = open(filename)
+    f = open(filename, encoding='utf-8')
     (_, size) = f.readline().split()
     d = int(size)
     count = 1
@@ -122,6 +122,7 @@ def main(argc, argv):
         logger.log(Logger.ERROR, 'Can not connect to database')
         return
 
+    con.set_client_encoding('UTF8')
     cur = con.cursor()
 
     init_tables(con, cur, vec_config.get_value('table_name'), logger)
