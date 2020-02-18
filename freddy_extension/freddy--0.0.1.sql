@@ -18,6 +18,14 @@ END
 $$
 LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION init(vectors regclass) RETURNS void AS $$
+BEGIN
+EXECUTE format('CREATE OR REPLACE FUNCTION get_vecs_name_original() RETURNS regclass AS ''SELECT regclass ''''%s'''''' LANGUAGE sql IMMUTABLE', vectors);
+EXECUTE format('CREATE OR REPLACE FUNCTION get_vecs_name() RETURNS regclass AS ''SELECT regclass ''''%s'''''' LANGUAGE sql IMMUTABLE', vectors);
+END
+$$
+LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION set_pvf(f integer) RETURNS void AS $$
 BEGIN
 EXECUTE format('CREATE OR REPLACE FUNCTION get_pvf() RETURNS integer AS ''SELECT %s'' LANGUAGE sql IMMUTABLE', f);
@@ -342,6 +350,10 @@ CREATE OR REPLACE FUNCTION ivfadc_search(bytea, integer) RETURNS SETOF record
 AS '$libdir/freddy', 'ivfadc_search'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION knn_hamming(bytea, integer) RETURNS SETOF record
+AS '$libdir/freddy', 'knn_hamming'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION pq_search_in(bytea, integer, integer[]) RETURNS SETOF record
 AS '$libdir/freddy', 'pq_search_in'
 LANGUAGE C IMMUTABLE STRICT;
@@ -420,6 +432,21 @@ INNER JOIN %s AS v1 ON v1.word = ''%s''
 ORDER BY cosine_similarity_bytea(v1.vector, v2.vector) DESC
 FETCH FIRST %s ROWS ONLY
 ', table_name, table_name, replace(token, '''', ''''''), k);
+END
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION k_nearest_neighbour_bytea(token varchar(100), k integer) RETURNS TABLE (word varchar(100), distance integer) AS $$
+DECLARE
+table_name varchar;
+BEGIN
+EXECUTE 'SELECT get_vecs_name_original()' INTO table_name;
+RETURN QUERY EXECUTE format('
+SELECT v2.word, distance 
+FROM %s AS v1, knn_hamming(v1.vector, %s) AS (idx integer, distance integer)
+INNER JOIN %s AS v2 ON idx = v2.id
+WHERE v1.word = ''%s''
+', table_name, k, table_name, replace(token, '''', ''''''), k);
 END
 $$
 LANGUAGE plpgsql;

@@ -414,6 +414,136 @@ Datum ivfadc_search(PG_FUNCTION_ARGS) {
   }
 }
 
+PG_FUNCTION_INFO_V1(knn_hamming);
+
+Datum knn_hamming(PG_FUNCTION_ARGS) {
+  FuncCallContext* funcctx;
+  TupleDesc outtertupdesc;
+  TupleTableSlot* slot;
+  AttInMetadata* attinmeta;
+  UsrFctx* usrfctx;
+
+  if (SRF_IS_FIRSTCALL()) {
+    clock_t start, start_database, start_distances, start_topK;
+    clock_t end, end_database, end_distances, end_topK;
+    clock_t distances_clocks, topK_clocks;
+
+    uint64_t* queryVector;
+    int k;
+
+    int vec_size = 0;
+
+    MemoryContext oldcontext;
+
+    char* command;
+    ResultInfo rInfo;
+
+    TopK topK;
+    int maxDist;
+
+    char* vecs_table = palloc(sizeof(char) * 100);
+
+    start = clock();
+
+    // read query from function args
+    vec_size = 0;
+    convert_bytea_uint64(PG_GETARG_BYTEA_P(0), &queryVector, &vec_size);
+    k = PG_GETARG_INT32(1);
+
+    topK = palloc(k * sizeof(TopKEntry));
+    maxDist = 1000.0;  // sufficient high value
+    for (int i = 0; i < k; i++) {
+      topK[i].distance = maxDist;
+      topK[i].id = -1;
+    }
+
+    getTableName(ORIGINAL, vecs_table, 100);
+
+    funcctx = SRF_FIRSTCALL_INIT();
+    oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+    
+    SPI_connect();
+    command = palloc(sizeof(char) * 100);
+    start_database = clock();
+    sprintf(command, "SELECT id, vector FROM %s", vecs_table);
+    elog(INFO, "command: %s", command);
+    rInfo.ret = SPI_exec(command, 0);
+    rInfo.proc = SPI_processed;
+    end_database = clock();
+    elog(INFO, "get vectors from database time %f", 
+          (double)(end_database - start_database) / CLOCKS_PER_SEC);
+    
+    if (rInfo.ret > 0 && SPI_tuptable != NULL) {
+      TupleDesc tupdesc = SPI_tuptable->tupdesc;
+      SPITupleTable* tuptable = SPI_tuptable;
+
+      Datum id;
+      Datum vector_bytea;
+      uint64_t* vector;
+      int wordId;
+      int bitvec_xor = 0;
+      int distance;
+
+      int i;
+      start_distances = clock();
+      for(i = 0; i < rInfo.proc; i++){
+        HeapTuple tuple = tuptable->vals[i];
+        id = SPI_getbinval(tuple, tupdesc, 1, &rInfo.info);
+        vector_bytea = SPI_getbinval(tuple, tupdesc, 2, &rInfo.info);
+        wordId = DatumGetInt32(id);
+        vec_size = 0;
+        convert_bytea_uint64(DatumGetByteaP(vector_bytea), &vector, &vec_size);
+        distance = 0;
+        for (int j = 0; j < vec_size; j++) {
+          bitvec_xor = queryVector[j] ^ vector[j];
+          distance += __builtin_popcountll(bitvec_xor);
+        }
+        if (distance < maxDist) {
+          updateTopK(topK, (float)distance, wordId, k, maxDist);
+          maxDist = topK[k - 1].distance;
+        }
+      }
+      end_distances = clock();
+      elog(INFO, "calculate distances time %f", 
+            (double)(end_distances - start_distances) / CLOCKS_PER_SEC);
+      SPI_finish();
+    }
+    
+    usrfctx = (UsrFctx*)palloc(sizeof(UsrFctx));
+    fillUsrFctx(usrfctx, topK, k);
+    funcctx->user_fctx = (void*)usrfctx;
+    outtertupdesc = CreateTemplateTupleDesc(2, false);
+    TupleDescInitEntry(outtertupdesc, 1, "Id", INT4OID, -1, 0);
+    TupleDescInitEntry(outtertupdesc, 2, "Distance", INT4OID, -1, 0);
+    slot = TupleDescGetSlot(outtertupdesc);
+    funcctx->slot = slot;
+    attinmeta = TupleDescGetAttInMetadata(outtertupdesc);
+    funcctx->attinmeta = attinmeta;
+
+    MemoryContextSwitchTo(oldcontext);
+
+    end = clock();
+    elog(INFO, "time %f", (double)(end - start) / CLOCKS_PER_SEC);
+  }
+
+  funcctx = SRF_PERCALL_SETUP();
+  usrfctx = (UsrFctx*)funcctx->user_fctx;
+
+  // return results
+  if (usrfctx->iter >= usrfctx->k) {
+    SRF_RETURN_DONE(funcctx);
+  } else {
+    Datum result;
+    HeapTuple outTuple;
+    snprintf(usrfctx->values[0], 16, "%d", usrfctx->tk[usrfctx->iter].id);
+    snprintf(usrfctx->values[1], 16, "%d", (int)usrfctx->tk[usrfctx->iter].distance);
+    usrfctx->iter++;
+    outTuple = BuildTupleFromCStrings(funcctx->attinmeta, usrfctx->values);
+    result = TupleGetDatum(funcctx->slot, outTuple);
+    SRF_RETURN_NEXT(funcctx, result);
+  }
+}
+
 PG_FUNCTION_INFO_V1(pq_search_in_batch);
 
 Datum pq_search_in_batch(PG_FUNCTION_ARGS) {
