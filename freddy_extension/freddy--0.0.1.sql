@@ -354,6 +354,10 @@ CREATE OR REPLACE FUNCTION knn_hamming(bytea, integer) RETURNS SETOF record
 AS '$libdir/freddy', 'knn_hamming'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION clock_runtime() RETURNS void
+AS '$libdir/freddy', 'clock_runtime'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION pq_search_in(bytea, integer, integer[]) RETURNS SETOF record
 AS '$libdir/freddy', 'pq_search_in'
 LANGUAGE C IMMUTABLE STRICT;
@@ -446,7 +450,7 @@ SELECT v2.word, distance
 FROM %s AS v1, knn_hamming(v1.vector, %s) AS (idx integer, distance integer)
 INNER JOIN %s AS v2 ON idx = v2.id
 WHERE v1.word = ''%s''
-', table_name, k, table_name, replace(token, '''', ''''''), k);
+', table_name, k, table_name, replace(token, '''', ''''''));
 END
 $$
 LANGUAGE plpgsql;

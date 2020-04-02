@@ -414,6 +414,26 @@ Datum ivfadc_search(PG_FUNCTION_ARGS) {
   }
 }
 
+PG_FUNCTION_INFO_V1(clock_runtime);
+
+Datum clock_runtime(PG_FUNCTION_ARGS) {
+  struct timeval start1, start2, end1, end2;
+  double time1, time2, clocks;
+  clocks = 0;
+  for(int i=0; i<10000; i++){
+    gettimeofday(&start1, NULL);
+    gettimeofday(&start2, NULL);
+    gettimeofday(&end2, NULL);
+    time1 = (end2.tv_sec * 1000.0 + end2.tv_usec / 1000.0) - (start2.tv_sec * 1000.0 + start2.tv_usec / 1000.0);
+    // elog(INFO, "time1 %d", time1);
+    gettimeofday(&end1, NULL);
+    time2 = (end1.tv_sec * 1000.0 + end1.tv_usec / 1000.0) - (start1.tv_sec * 1000.0 + start1.tv_usec / 1000.0);
+    clocks += time2;
+  }
+  elog(INFO, "time for 10000 time measurements: %f", (double) clocks);
+  PG_RETURN_NULL();
+}
+
 PG_FUNCTION_INFO_V1(knn_hamming);
 
 Datum knn_hamming(PG_FUNCTION_ARGS) {
@@ -424,9 +444,8 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
   UsrFctx* usrfctx;
 
   if (SRF_IS_FIRSTCALL()) {
-    clock_t start, start_database, start_distances, start_topK;
-    clock_t end, end_database, end_distances, end_topK;
-    clock_t distances_clocks, topK_clocks;
+    struct timeval start, start_database, start_distances;
+    struct timeval end, end_database, end_distances;
 
     uint64_t* queryVector;
     int k;
@@ -443,7 +462,7 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
 
     char* vecs_table = palloc(sizeof(char) * 100);
 
-    start = clock();
+    gettimeofday(&start, NULL);
 
     // read query from function args
     vec_size = 0;
@@ -464,14 +483,17 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
     
     SPI_connect();
     command = palloc(sizeof(char) * 100);
-    start_database = clock();
+
+    gettimeofday(&start_database, NULL);
     sprintf(command, "SELECT id, vector FROM %s", vecs_table);
     elog(INFO, "command: %s", command);
     rInfo.ret = SPI_exec(command, 0);
     rInfo.proc = SPI_processed;
-    end_database = clock();
-    elog(INFO, "get vectors from database time %f", 
-          (double)(end_database - start_database) / CLOCKS_PER_SEC);
+    gettimeofday(&end_database, NULL);
+
+    elog(INFO, "get vectors from database time %f",
+            (end_database.tv_sec * 1000.0 + end_database.tv_usec / 1000.0) - 
+            (start_database.tv_sec * 1000.0 + start_database.tv_usec / 1000.0));
     
     if (rInfo.ret > 0 && SPI_tuptable != NULL) {
       TupleDesc tupdesc = SPI_tuptable->tupdesc;
@@ -485,7 +507,7 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
       int distance;
 
       int i;
-      start_distances = clock();
+      gettimeofday(&start_distances, NULL);
       for(i = 0; i < rInfo.proc; i++){
         HeapTuple tuple = tuptable->vals[i];
         id = SPI_getbinval(tuple, tupdesc, 1, &rInfo.info);
@@ -503,9 +525,10 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
           maxDist = topK[k - 1].distance;
         }
       }
-      end_distances = clock();
-      elog(INFO, "calculate distances time %f", 
-            (double)(end_distances - start_distances) / CLOCKS_PER_SEC);
+      gettimeofday(&end_distances, NULL);
+      elog(INFO, "calculate distances time %f",
+            (end_distances.tv_sec * 1000.0 + end_distances.tv_usec / 1000.0) - 
+            (start_distances.tv_sec * 1000.0 + start_distances.tv_usec / 1000.0));
       SPI_finish();
     }
     
@@ -522,8 +545,9 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
 
     MemoryContextSwitchTo(oldcontext);
 
-    end = clock();
-    elog(INFO, "time %f", (double)(end - start) / CLOCKS_PER_SEC);
+    gettimeofday(&end, NULL);
+    elog(INFO, "time %f", (end.tv_sec * 1000.0 + end.tv_usec / 1000.0) - 
+            (start.tv_sec * 1000.0 + start.tv_usec / 1000.0));
   }
 
   funcctx = SRF_PERCALL_SETUP();
