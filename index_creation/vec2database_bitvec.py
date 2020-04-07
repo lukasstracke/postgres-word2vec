@@ -41,7 +41,7 @@ def float_to_bitvec(vector):
     return psycopg2.Binary(bitvec)
 
 def insert_vectors(filename, con, cur, table_name, batch_size, insert_limit, logger):
-    f = open(filename, encoding='utf-8')
+    f = open(filename, encoding='UTF-8')
     (_, size) = f.readline().split()
     d = int(size)
     count = 1
@@ -49,22 +49,30 @@ def insert_vectors(filename, con, cur, table_name, batch_size, insert_limit, log
     values = []
     while line:
         splits = line.split()
-        # print(splits[:1])
-        bitvec = float_to_bitvec(splits[1:])
-        if (len(splits[0]) < 100) and (bitvec != None) and (len(splits) == (d + 1)):
-            values.append({"word": splits[0], "bitvec": bitvec})
+        words = [x for x in splits if '0.33333' not in x]
+        word = ' '.join(words)
+        # print(word)
+        floatvec = [x for x in splits if x not in words]
+        # print(floatvec)
+        bitvec = float_to_bitvec(floatvec)
+        if (len(word.encode('utf-8')) < 100) and (bitvec != None) and (len(floatvec) == d):
+            values.append({"word": word, "bitvec": bitvec})
+            if count % batch_size == 0:
+                try:
+                    cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(bitvec)s)", tuple(values))
+                    con.commit()
+                    if count % 1000 == 0:
+                        logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
+                    values = []
+                except Exception as e:
+                    logger.log(Logger.INFO, sorted([x['word'] for x in values[:49]], key=lambda x: len(x), reverse=True))
+                    sys.exit("Insertion Error: " + str(e))
+            count+= 1
         else:
-            logger.log(Logger.WARNING, 'parsing problem with ' + line)
-            count -= 1
-        if count % batch_size == 0:
-            cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(bitvec)s)", tuple(values))
-            con.commit()
-            logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
-            values = []
+            logger.log(Logger.WARNING, 'parsing problem with "' + word + '". len_word=' + str(len(word)) + ', len_vec=' + str(len(floatvec)))
         if count-1 == insert_limit:
             break
 
-        count+= 1
         line = f.readline()
 
     cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(bitvec)s)", tuple(values))
