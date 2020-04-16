@@ -366,6 +366,10 @@ CREATE OR REPLACE FUNCTION ivpq_search_in(bytea[], integer[], integer, integer[]
 AS '$libdir/freddy', 'ivpq_search_in'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION hamming_in_batch(bytea[], integer[], integer, integer[], boolean) RETURNS SETOF record
+AS '$libdir/freddy', 'hamming_in_batch'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION pq_search_in_batch(bytea[], integer[], integer, integer[], boolean) RETURNS SETOF record
 AS '$libdir/freddy', 'pq_search_in_batch'
 LANGUAGE C IMMUTABLE STRICT;
@@ -616,6 +620,40 @@ WHERE wv.word = ''%s''
 ORDER BY cosine_similarity_bytea(wv.vector, pqs.word) DESC
 FETCH FIRST %s ROWS ONLY
 ', table_name, post_verif*k, pq_quantization_name, replace(token, '''', ''''''), k);
+END
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_set varchar(100)[], k integer, input_set varchar[]) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
+DECLARE
+table_name varchar;
+use_targetlist boolean;
+formated varchar[];
+formated_queries varchar[];
+ids integer[];
+vectors bytea[];
+words varchar[];
+rec RECORD;
+BEGIN
+EXECUTE 'SELECT get_vecs_name()' INTO table_name;
+EXECUTE 'SELECT get_use_targetlist()' INTO use_targetlist;
+FOR I IN array_lower(input_set, 1)..array_upper(input_set, 1) LOOP
+  formated[I] = replace(input_set[I], '''', '''''');
+END LOOP;
+
+FOR I IN array_lower(query_set, 1)..array_upper(query_set, 1) LOOP
+  formated_queries[I] = replace(query_set[I], '''', '''''');
+END LOOP;
+-- create lookup id -> query_word
+FOR rec IN EXECUTE format('SELECT word, vector, id FROM %s WHERE word = ANY(''%s'')', table_name, formated_queries) LOOP
+  words := words || rec.word;
+  vectors := vectors || rec.vector;
+  ids := ids || rec.id;
+END LOOP;
+RETURN QUERY EXECUTE format('
+SELECT f.word, g.word, distance
+FROM hamming_in_batch(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])), ''%s'') AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;
+', vectors, ids, k, table_name, formated, use_targetlist, table_name, table_name);
 END
 $$
 LANGUAGE plpgsql;
