@@ -1,0 +1,7 @@
+{
+  "table_name": "word2bits_75",
+  "index_name": "word2bits_word_idx",
+  "vec_file_path": "../../../../../8. Semester/Beleg/Michael/FREDDY-Repo/postgres-word2vec/vectors/w2b_bitlevel1_size800_vocab400K",
+  "insert_limit": 300000,
+  "normalized": false
+}
