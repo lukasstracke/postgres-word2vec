@@ -366,7 +366,7 @@ CREATE OR REPLACE FUNCTION ivpq_search_in(bytea[], integer[], integer, integer[]
 AS '$libdir/freddy', 'ivpq_search_in'
 LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION hamming_in_batch(bytea[], integer[], integer, integer[], boolean) RETURNS SETOF record
+CREATE OR REPLACE FUNCTION hamming_in_batch(bytea[], integer[], integer, integer[]) RETURNS SETOF record
 AS '$libdir/freddy', 'hamming_in_batch'
 LANGUAGE C IMMUTABLE STRICT;
 
@@ -627,7 +627,6 @@ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_set varchar(100)[], k integer, input_set varchar[]) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
 DECLARE
 table_name varchar;
-use_targetlist boolean;
 formated varchar[];
 formated_queries varchar[];
 ids integer[];
@@ -636,7 +635,6 @@ words varchar[];
 rec RECORD;
 BEGIN
 EXECUTE 'SELECT get_vecs_name()' INTO table_name;
-EXECUTE 'SELECT get_use_targetlist()' INTO use_targetlist;
 FOR I IN array_lower(input_set, 1)..array_upper(input_set, 1) LOOP
   formated[I] = replace(input_set[I], '''', '''''');
 END LOOP;

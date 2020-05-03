@@ -572,7 +572,6 @@ PG_FUNCTION_INFO_V1(hamming_in_batch);
 
 Datum hamming_in_batch(PG_FUNCTION_ARGS) {
   const float MAX_DIST = 1000.0;
-  // const int TARGET_LISTS_SIZE = 1000;
 
   FuncCallContext* funcctx;
   TupleDesc outtertupdesc;
@@ -591,8 +590,6 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     int inputIdsSize;
     int* queryIds;
 
-    // TargetListElem targetList;
-       
     int queryDim;
     int vec_size = 0;
     MemoryContext oldcontext;
@@ -610,8 +607,6 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     Datum* queryIdData;
     Datum* idsData;
     Datum* i_data;
-
-    bool useTargetLists;
 
     char* vecs_table = palloc(sizeof(char) * 100);
     
@@ -652,16 +647,9 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     }
     inputIdsSize = n;
 
-    //useTargetLists = PG_GETARG_BOOL(4);
-    useTargetLists = false;
-
     initTopKs(&topKs, &maxDists, queryVectorsSize, k, MAX_DIST);
 
     gettimeofday(&start_query, NULL);
-
-    if(useTargetLists) {
-      //targetlists???
-    }
 
     //DB-Anfrage
     command = palloc(inputIdsSize * 100 * sizeof(char) + 1000);
@@ -682,6 +670,8 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
             (end_query.tv_sec * 1000.0 + end_query.tv_usec / 1000.0) - 
             (start_query.tv_sec * 1000.0 + start_query.tv_usec / 1000.0));
 
+    pfree(inputIds);
+
     SPI_connect();
     gettimeofday(&start_database, NULL);
     // elog(INFO, "command: %s", command);
@@ -690,6 +680,7 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     elog(INFO, "get vectors from database time %f",
             (end_database.tv_sec * 1000.0 + end_database.tv_usec / 1000.0) - 
             (start_database.tv_sec * 1000.0 + start_database.tv_usec / 1000.0));
+    pfree(command);
     rInfo.proc = SPI_processed;
     elog(INFO, "retrieved %d results", rInfo.proc);
 
@@ -710,25 +701,19 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
         vector_bytea = SPI_getbinval(tuple, tupdesc, 2, &rInfo.info);
         vec_size = 0;
         convert_bytea_uint64(DatumGetByteaP(vector_bytea), &vector, &vec_size);
-        if(useTargetLists){
-          //targetlists???
-        } else {
-          for (int j = 0; j < queryVectorsSize; j++) {
-            distance = 0;
-            for (int sub = 0; sub < vec_size; sub++) {
-              bitvec_xor = queryVectors[j][sub] ^ vector[sub];
-              distance += __builtin_popcountll(bitvec_xor);
-            }
-            if ((float)distance < maxDists[j]) {
-              updateTopK(topKs[j], (float)distance, wordId, k, maxDists[j]);
-              maxDists[j] = topKs[j][k - 1].distance;
-            }
+        for (int j = 0; j < queryVectorsSize; j++) {
+          distance = 0;
+          for (int sub = 0; sub < vec_size; sub++) {
+            bitvec_xor = queryVectors[j][sub] ^ vector[sub];
+            distance += __builtin_popcountll(bitvec_xor);
+          }
+          if ((float)distance < maxDists[j]) {
+            updateTopK(topKs[j], (float)distance, wordId, k, maxDists[j]);
+            maxDists[j] = topKs[j][k - 1].distance;
           }
         }
       }
     }
-
-    // if(useTargetLists){//targetlists???}
 
     gettimeofday(&end_distances, NULL);
     elog(INFO, "distances time %f",
@@ -737,7 +722,7 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
 
     SPI_finish();
 
-    //return tokKs
+    //return topKs
     usrfctx = (UsrFctxBatch*)palloc(sizeof(UsrFctxBatch));
     fillUsrFctxBatch(usrfctx, queryIds, queryVectorsSize, topKs, k);
     funcctx->user_fctx = (void*)usrfctx;
@@ -777,7 +762,6 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     result = TupleGetDatum(funcctx->slot, outTuple);
     SRF_RETURN_NEXT(funcctx, result);
   }
-  PG_RETURN_NULL();
 }
 
 PG_FUNCTION_INFO_V1(pq_search_in_batch);
