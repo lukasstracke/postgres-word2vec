@@ -370,6 +370,14 @@ CREATE OR REPLACE FUNCTION hamming_in_batch(bytea[], integer[], integer, integer
 AS '$libdir/freddy', 'hamming_in_batch'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION hamming_minimal(bytea[], integer[], integer, integer[]) RETURNS SETOF record
+AS '$libdir/freddy', 'hamming_minimal'
+LANGUAGE C IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION hamming_null(bytea[], integer[], integer, integer[]) RETURNS void
+AS '$libdir/freddy', 'hamming_null'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION pq_search_in_batch(bytea[], integer[], integer, integer[], boolean) RETURNS SETOF record
 AS '$libdir/freddy', 'pq_search_in_batch'
 LANGUAGE C IMMUTABLE STRICT;
@@ -648,10 +656,13 @@ FOR rec IN EXECUTE format('SELECT word, vector, id FROM %s WHERE word = ANY(''%s
   vectors := vectors || rec.vector;
   ids := ids || rec.id;
 END LOOP;
+-- RETURN QUERY EXECUTE format('
+-- SELECT f.word, g.word, distance
+-- FROM hamming_in_batch(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])), ''%s'') AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;
+-- ', vectors, ids, k, table_name, formated, use_targetlist, table_name, table_name);
 RETURN QUERY EXECUTE format('
-SELECT f.word, g.word, distance
-FROM hamming_in_batch(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])), ''%s'') AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;
-', vectors, ids, k, table_name, formated, use_targetlist, table_name, table_name);
+SELECT * FROM hamming_null(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])));
+', vectors, ids, k, table_name, formated);
 END
 $$
 LANGUAGE plpgsql;

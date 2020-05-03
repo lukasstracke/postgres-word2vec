@@ -568,6 +568,31 @@ Datum knn_hamming(PG_FUNCTION_ARGS) {
   }
 }
 
+PG_FUNCTION_INFO_V1(hamming_null);
+
+Datum hamming_null(PG_FUNCTION_ARGS) {
+  PG_RETURN_NULL();
+}
+
+PG_FUNCTION_INFO_V1(hamming_minimal);
+
+Datum hamming_minimal(PG_FUNCTION_ARGS) {
+  FuncCallContext* funcctx;
+  UsrFctxBatch* usrfctx;
+
+  if (SRF_IS_FIRSTCALL()) {
+    MemoryContext oldcontext;
+    funcctx = SRF_FIRSTCALL_INIT();
+    oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+    usrfctx = (UsrFctxBatch*)palloc(sizeof(UsrFctxBatch));
+    funcctx->user_fctx = (void*)usrfctx;
+    MemoryContextSwitchTo(oldcontext);    
+  }
+  funcctx = SRF_PERCALL_SETUP();
+  usrfctx = (UsrFctxBatch*)funcctx->user_fctx;
+  SRF_RETURN_DONE(funcctx);
+}
+
 PG_FUNCTION_INFO_V1(hamming_in_batch);
 
 Datum hamming_in_batch(PG_FUNCTION_ARGS) {
