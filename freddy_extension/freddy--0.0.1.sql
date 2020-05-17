@@ -374,7 +374,7 @@ CREATE OR REPLACE FUNCTION hamming_minimal(bytea[], integer[], integer, integer[
 AS '$libdir/freddy', 'hamming_minimal'
 LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION hamming_null(bytea[], integer[], integer, integer[]) RETURNS void
+CREATE OR REPLACE FUNCTION hamming_null(bytea[], integer[], integer, varchar[]) RETURNS void
 AS '$libdir/freddy', 'hamming_null'
 LANGUAGE C IMMUTABLE STRICT;
 
@@ -632,37 +632,48 @@ END
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_set varchar(100)[], k integer, input_set varchar[]) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
+-- CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_set varchar(100)[], k integer, input_set varchar[]) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
+CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_set varchar(100)[], k integer, input_set varchar[]) RETURNS void AS $$
 DECLARE
 table_name varchar;
-formated varchar[];
-formated_queries varchar[];
 ids integer[];
 vectors bytea[];
-words varchar[];
 rec RECORD;
 BEGIN
 EXECUTE 'SELECT get_vecs_name()' INTO table_name;
-FOR I IN array_lower(input_set, 1)..array_upper(input_set, 1) LOOP
-  formated[I] = replace(input_set[I], '''', '''''');
-END LOOP;
-
-FOR I IN array_lower(query_set, 1)..array_upper(query_set, 1) LOOP
-  formated_queries[I] = replace(query_set[I], '''', '''''');
-END LOOP;
 -- create lookup id -> query_word
-FOR rec IN EXECUTE format('SELECT word, vector, id FROM %s WHERE word = ANY(''%s'')', table_name, formated_queries) LOOP
-  words := words || rec.word;
+FOR rec IN EXECUTE format('SELECT vector, id FROM %s WHERE word = ANY($1)', table_name) USING query_set LOOP
   vectors := vectors || rec.vector;
   ids := ids || rec.id;
 END LOOP;
--- RETURN QUERY EXECUTE format('
--- SELECT f.word, g.word, distance
--- FROM hamming_in_batch(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])), ''%s'') AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;
--- ', vectors, ids, k, table_name, formated, use_targetlist, table_name, table_name);
-RETURN QUERY EXECUTE format('
-SELECT * FROM hamming_null(''%s''::bytea[], ''%s''::integer[], ''%s''::int, ARRAY(SELECT id FROM %s WHERE word = ANY(''%s''::varchar(100)[])));
-', vectors, ids, k, table_name, formated);
+-- RETURN QUERY EXECUTE format(
+--   'SELECT f.word, g.word, distance '
+--   'FROM hamming_in_batch($1::bytea[], $2::integer[], $3::int, ARRAY(SELECT id FROM %s WHERE word = ANY($4::varchar(100)[]))) '
+--   'AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;', 
+--   table_name, table_name, table_name)
+--   USING vectors, ids, k, input_set;
+-- EXECUTE format('SELECT * FROM hamming_null($1::bytea[], $2::integer[], $3::int, '
+--   'ARRAY(SELECT id FROM %s WHERE word = ANY($4::varchar(100)[])));', table_name)
+--   USING vectors, ids, k, input_set;
+EXECUTE format('SELECT * FROM hamming_null($1::bytea[], $2::integer[], $3::int, '
+  '$4::varchar(100)[]);', table_name)
+  USING vectors, ids, k, input_set;
+END
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION knn_in_hamming_batch(query_ids integer[], k integer, target_ids integer[]) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
+DECLARE
+table_name varchar;
+BEGIN
+EXECUTE 'SELECT get_vecs_name()' INTO table_name;
+-- create lookup id -> query_word
+RETURN QUERY EXECUTE format(
+  'SELECT f.word, g.word, distance '
+  'FROM hamming_in_batch(ARRAY(SELECT vector FROM %s WHERE id = ANY($1::integer[])), $1::integer[], $2::int, $3::integer[]) '
+  'AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;', 
+  table_name, table_name, table_name, table_name)
+  USING query_ids, k, target_ids;
 END
 $$
 LANGUAGE plpgsql;
