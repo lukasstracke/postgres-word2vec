@@ -374,7 +374,7 @@ CREATE OR REPLACE FUNCTION hamming_minimal(bytea[], integer[], integer, integer[
 AS '$libdir/freddy', 'hamming_minimal'
 LANGUAGE C IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION hamming_null(bytea[], integer[], integer, varchar[]) RETURNS void
+CREATE OR REPLACE FUNCTION hamming_null(bytea[], integer[], integer, integer[]) RETURNS void
 AS '$libdir/freddy', 'hamming_null'
 LANGUAGE C IMMUTABLE STRICT;
 

@@ -655,7 +655,8 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
     // for the output it is necessary to map query vectors to ids
     getArray(PG_GETARG_ARRAYTYPE_P(1), &queryIdData, &n);
     if (n != queryVectorsSize) {
-      elog(ERROR, "Number of query vectors and query vector ids differs!");
+      elog(ERROR, "Number of query vectors (%d) and query vector ids (%d) differs!",
+              queryVectorsSize, n);
     }
     queryIds = palloc(queryVectorsSize * sizeof(int));
     for (int i = 0; i < queryVectorsSize; i++) {
@@ -720,21 +721,21 @@ Datum hamming_in_batch(PG_FUNCTION_ARGS) {
       int distance;
 
       gettimeofday(&start_distances, NULL);
-      for (int i = 0; i < rInfo.proc; i++) {
-        HeapTuple tuple = tuptable->vals[i];
+      for (int targetVectorsIndex = 0; targetVectorsIndex < rInfo.proc; targetVectorsIndex++) {
+        HeapTuple tuple = tuptable->vals[targetVectorsIndex];
         wordId = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &rInfo.info));
         vector_bytea = SPI_getbinval(tuple, tupdesc, 2, &rInfo.info);
         vec_size = 0;
         convert_bytea_uint64(DatumGetByteaP(vector_bytea), &vector, &vec_size);
-        for (int j = 0; j < queryVectorsSize; j++) {
+        for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++) {
           distance = 0;
           for (int sub = 0; sub < vec_size; sub++) {
-            bitvec_xor = queryVectors[j][sub] ^ vector[sub];
+            bitvec_xor = queryVectors[queryVectorsIndex][sub] ^ vector[sub];
             distance += __builtin_popcountll(bitvec_xor);
           }
-          if ((float)distance < maxDists[j]) {
-            updateTopK(topKs[j], (float)distance, wordId, k, maxDists[j]);
-            maxDists[j] = topKs[j][k - 1].distance;
+          if ((float)distance < maxDists[queryVectorsIndex]) {
+            updateTopK(topKs[queryVectorsIndex], (float)distance, wordId, k, maxDists[queryVectorsIndex]);
+            maxDists[queryVectorsIndex] = topKs[queryVectorsIndex][k - 1].distance;
           }
         }
       }
