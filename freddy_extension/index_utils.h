@@ -116,6 +116,10 @@ typedef struct CodebookCompound {
 
 void updateTopK(TopK tk, float distance, int id, int k, int maxDist);
 
+void reorderTopK(TopK tk, int k, int* fillLevel, float* maxDist);
+
+void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance, int id, int k, float* maxDist);
+
 void updateTopKPV(TopKPV tk, float distance, int id, int k, int maxDist,
                   float4* vector, int dim);
 

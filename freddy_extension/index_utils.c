@@ -32,6 +32,22 @@ void updateTopK(TopK tk, float distance, int id, int k, int maxDist) {
   tk[i].id = id;
 }
 
+void reorderTopK(TopK tk, int k, int *fillLevel, float *maxDist) {
+  qsort(tk, *fillLevel, sizeof(TopKEntry), cmpTopKEntry);
+  *fillLevel = k;
+  *maxDist = tk[k - 1].distance;
+}
+
+void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance, int id, int k, float* maxDist) {
+  tk[*fillLevel].id = id;
+  tk[*fillLevel].distance = distance;
+
+  (*fillLevel)++;
+  if (*fillLevel == (batchSize - 1)) {
+    reorderTopK(tk, k, fillLevel, maxDist);
+  }
+}
+
 void updateTopKPV(TopKPV tk, float distance, int id, int k, int maxDist,
                   float4* vector, int dim) {
   int i;

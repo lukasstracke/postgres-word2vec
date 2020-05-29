@@ -366,6 +366,10 @@ CREATE OR REPLACE FUNCTION ivpq_search_in(bytea[], integer[], integer, integer[]
 AS '$libdir/freddy', 'ivpq_search_in'
 LANGUAGE C IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION hamming_in_batch_fast(bytea[], integer[], integer, integer[], integer) RETURNS SETOF record
+AS '$libdir/freddy', 'hamming_in_batch_fast'
+LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION hamming_in_batch(bytea[], integer[], integer, integer[]) RETURNS SETOF record
 AS '$libdir/freddy', 'hamming_in_batch'
 LANGUAGE C IMMUTABLE STRICT;
@@ -658,6 +662,22 @@ END LOOP;
 EXECUTE format('SELECT * FROM hamming_null($1::bytea[], $2::integer[], $3::int, '
   '$4::varchar(100)[]);', table_name)
   USING vectors, ids, k, input_set;
+END
+$$
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION knn_in_hamming_batch_fast(query_ids integer[], k integer, target_ids integer[], batch_size integer) RETURNS TABLE (query varchar, target varchar, distance integer) AS $$
+DECLARE
+table_name varchar;
+BEGIN
+EXECUTE 'SELECT get_vecs_name()' INTO table_name;
+-- create lookup id -> query_word
+RETURN QUERY EXECUTE format(
+  'SELECT f.word, g.word, distance '
+  'FROM hamming_in_batch_fast(ARRAY(SELECT vector FROM %s WHERE id = ANY($1::integer[])), $1::integer[], $2::int, $3::integer[], $4::integer) '
+  'AS (qid integer, tid integer, distance integer) INNER JOIN %s AS f ON qid = f.id INNER JOIN %s AS g ON tid = g.id;', 
+  table_name, table_name, table_name, table_name)
+  USING query_ids, k, target_ids, batch_size;
 END
 $$
 LANGUAGE plpgsql;
