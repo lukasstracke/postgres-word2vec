@@ -948,7 +948,7 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
       }
 
       for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++){
-        qsort(topKs[queryVectorsIndex], fillLevels[queryVectorsIndex], sizeof(TopKEntry), cmpTopKEntry);
+        sortTopK(topKs[queryVectorsIndex], 0, fillLevels[queryVectorsIndex], k);
       }
     }
 

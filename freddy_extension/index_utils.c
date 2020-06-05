@@ -32,13 +32,43 @@ void updateTopK(TopK tk, float distance, int id, int k, int maxDist) {
   tk[i].id = id;
 }
 
+void topKSwap(TopK tk, int i, int j){
+  TopKEntry swapEntry;
+  swapEntry = tk[j];
+  tk[j] = tk[i];
+  tk[i] = swapEntry;
+}
+
+static int partition(TopK tk, int first, int last) {
+  TopKEntry pivot = tk[last];
+  int i = first;
+  for(int j = first; j <= last; j++) {
+    if(tk[j].distance < pivot.distance){
+      topKSwap(tk, i, j);
+      i++;
+    }
+  }
+  topKSwap(tk, i, last);
+  return i;
+}
+
+void sortTopK(TopK tk, int first, int last, int k) {
+  if(first < last) {
+    int pivotIndex = partition(tk, first, last);
+    sortTopK(tk, first, pivotIndex - 1, k);
+    if(pivotIndex < k - 1) {
+      sortTopK(tk, pivotIndex + 1, last, k);
+    }
+  }
+}
+
 void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance, int id, int k, float* maxDist) {
   tk[*fillLevel].id = id;
   tk[*fillLevel].distance = distance;
 
   (*fillLevel)++;
   if (*fillLevel == (batchSize - 1)) {
-    qsort(tk, *fillLevel, sizeof(TopKEntry), cmpTopKEntry);
+    sortTopK(tk, 0, *fillLevel, k);
     *fillLevel = k;
   }
 }
