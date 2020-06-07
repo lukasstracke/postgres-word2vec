@@ -825,8 +825,8 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
 
     TopK* topKs;
     float* maxDists;
-    int *fillLevels = NULL;
-    int TOPK_BATCH_SIZE = PG_GETARG_INT32(4);
+    int *fillLevels;
+    int TOPK_BATCH_SIZE;
 
     // helper variables
     int n = 0;
@@ -873,6 +873,11 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
       inputIds[j] = DatumGetInt32(idsData[j]);
     }
     inputIdsSize = n;
+
+    TOPK_BATCH_SIZE = PG_GETARG_INT32(4);
+    if(TOPK_BATCH_SIZE < k) {
+      elog(ERROR, "Batch size must not be smaller than k!");
+    }
 
     initTopKs(&topKs, &maxDists, queryVectorsSize, TOPK_BATCH_SIZE, MAX_DIST);
     fillLevels = palloc(queryVectorsSize * sizeof(int));
