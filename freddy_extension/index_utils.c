@@ -59,7 +59,7 @@ static int partition(TopK tk, int first, int last) {
 void sortTopK(TopK tk, int first, int last, int k) {
   if (first < last) {
     int pivotIndex = partition(tk, first, last);
-    sortTopK(tk, first, pivotIndex - 1, k);
+    sortTopK(tk, first, pivotIndex, k);
     if (pivotIndex < k - 1) {
       sortTopK(tk, pivotIndex + 1, last, k);
     }
