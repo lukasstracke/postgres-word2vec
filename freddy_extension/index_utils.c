@@ -71,7 +71,7 @@ void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance
   tk[*fillLevel].distance = distance;
 
   (*fillLevel)++;
-  if (*fillLevel == (batchSize - 1)) {
+  if (*fillLevel >= (batchSize - 1)) {
     sortTopK(tk, 0, *fillLevel, k);
     *fillLevel = k;
   }
