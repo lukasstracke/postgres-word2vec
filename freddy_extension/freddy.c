@@ -828,6 +828,8 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
     int *fillLevels;
     int TOPK_BATCH_SIZE;
 
+    int sortcount = 0;
+
     // helper variables
     int n = 0;
     Datum* queryIdData;
@@ -946,7 +948,7 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
           }
           if ((float)distance < maxDists[queryVectorsIndex]) {
             updateTopKFast(topKs[queryVectorsIndex], TOPK_BATCH_SIZE, &fillLevels[queryVectorsIndex],
-                    (float)distance, wordId, k, &maxDists[queryVectorsIndex]);
+                    (float)distance, wordId, k, &maxDists[queryVectorsIndex], &sortcount);
             maxDists[queryVectorsIndex] = topKs[queryVectorsIndex][k - 1].distance;
           }
         }
@@ -954,7 +956,219 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
 
       for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++){
         sortTopK(topKs[queryVectorsIndex], 0, fillLevels[queryVectorsIndex], k);
+        sortcount++;
       }
+    }
+
+    gettimeofday(&end_distances, NULL);
+    elog(INFO, "distances time %f, sorted %d times",
+            (end_distances.tv_sec * 1000.0 + end_distances.tv_usec / 1000.0) - 
+            (start_distances.tv_sec * 1000.0 + start_distances.tv_usec / 1000.0), 
+            sortcount);
+
+    SPI_finish();
+
+    //return topKs
+    usrfctx = (UsrFctxBatch*)palloc(sizeof(UsrFctxBatch));
+    fillUsrFctxBatch(usrfctx, queryIds, queryVectorsSize, topKs, k);
+    funcctx->user_fctx = (void*)usrfctx;
+    outtertupdesc = CreateTemplateTupleDesc(3, false);
+
+    TupleDescInitEntry(outtertupdesc, 1, "QueryId", INT4OID, -1, 0);
+    TupleDescInitEntry(outtertupdesc, 2, "TargetId", INT4OID, -1, 0);
+    TupleDescInitEntry(outtertupdesc, 3, "Distance", INT4OID, -1, 0);
+    slot = TupleDescGetSlot(outtertupdesc);
+    funcctx->slot = slot;
+    attinmeta = TupleDescGetAttInMetadata(outtertupdesc);
+    funcctx->attinmeta = attinmeta;
+    gettimeofday(&end, NULL);
+    elog(INFO, "total time %f",
+            (end.tv_sec * 1000.0 + end.tv_usec / 1000.0) - 
+            (start.tv_sec * 1000.0 + start.tv_usec / 1000.0));
+    MemoryContextSwitchTo(oldcontext);    
+  }
+  funcctx = SRF_PERCALL_SETUP();
+  usrfctx = (UsrFctxBatch*)funcctx->user_fctx;
+  // return results
+  if (usrfctx->iter >= usrfctx->k * usrfctx->queryIdsSize) {
+    SRF_RETURN_DONE(funcctx);
+  } else {
+    Datum result;
+    HeapTuple outTuple;
+    snprintf(usrfctx->values[0], 16, "%d",
+             usrfctx->queryIds[usrfctx->iter / usrfctx->k]);
+    snprintf(
+        usrfctx->values[1], 16, "%d",
+        usrfctx->tk[usrfctx->iter / usrfctx->k][usrfctx->iter % usrfctx->k].id);
+    snprintf(usrfctx->values[2], 16, "%d",
+             (int)usrfctx->tk[usrfctx->iter / usrfctx->k][usrfctx->iter % usrfctx->k]
+                 .distance);
+    usrfctx->iter++;
+    outTuple = BuildTupleFromCStrings(funcctx->attinmeta, usrfctx->values);
+    result = TupleGetDatum(funcctx->slot, outTuple);
+    SRF_RETURN_NEXT(funcctx, result);
+  }
+}
+
+PG_FUNCTION_INFO_V1(hamming_in_batch_list);
+
+Datum hamming_in_batch_list(PG_FUNCTION_ARGS) {
+  const float MAX_DIST = 1000.0;
+
+  FuncCallContext* funcctx;
+  TupleDesc outtertupdesc;
+  TupleTableSlot* slot;
+  AttInMetadata* attinmeta;
+  UsrFctxBatch* usrfctx;
+
+  if (SRF_IS_FIRSTCALL()) {
+    struct timeval start, start_query, start_database, start_distances;
+    struct timeval end, end_query, end_database, end_distances;
+
+    uint64_t** queryVectors;
+    int queryVectorsSize;
+    int k;
+    int* inputIds;
+    int inputIdsSize;
+    int* queryIds;
+
+    int queryDim;
+    int vec_size = 0;
+    MemoryContext oldcontext;
+
+    char* command;
+    char* cur;
+
+    ResultInfo rInfo;
+
+    TopKListEntry** topKHeads;
+    TopKListEntry** topKTails;
+    TopK* resultTopKs;
+    float* maxDists;
+    int *fillLevels;
+
+    // helper variables
+    int n = 0;
+    Datum* queryIdData;
+    Datum* idsData;
+    Datum* i_data;
+
+    char* vecs_table = palloc(sizeof(char) * 100);
+    
+    gettimeofday(&start, NULL);
+    
+    getTableName(ORIGINAL, vecs_table, 100);
+
+    funcctx = SRF_FIRSTCALL_INIT();
+    oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+    
+    // read query from function args
+    getArray(PG_GETARG_ARRAYTYPE_P(0), &i_data, &n);
+    queryVectors = palloc(n * sizeof(uint64_t*));
+    queryVectorsSize = n;
+    for (int i = 0; i < n; i++) {
+      queryDim = 0;
+      convert_bytea_uint64(DatumGetByteaP(i_data[i]), &queryVectors[i],
+                           &queryDim);
+    }
+    n = 0;
+    // for the output it is necessary to map query vectors to ids
+    getArray(PG_GETARG_ARRAYTYPE_P(1), &queryIdData, &n);
+    if (n != queryVectorsSize) {
+      elog(ERROR, "Number of query vectors (%d) and query vector ids (%d) differs!",
+              queryVectorsSize, n);
+    }
+    queryIds = palloc(queryVectorsSize * sizeof(int));
+    for (int i = 0; i < queryVectorsSize; i++) {
+      queryIds[i] = DatumGetInt32(queryIdData[i]);
+    }
+    n = 0;
+
+    k = PG_GETARG_INT32(2);
+    getArray(PG_GETARG_ARRAYTYPE_P(3), &idsData, &n);  // target words
+    inputIds = palloc(n * sizeof(int));
+
+    for (int j = 0; j < n; j++) {
+      inputIds[j] = DatumGetInt32(idsData[j]);
+    }
+    inputIdsSize = n;
+
+    initTopKs(&resultTopKs, &maxDists, queryVectorsSize, k, MAX_DIST);
+    initTopKLists(&topKHeads, &topKTails, &maxDists, queryVectorsSize, MAX_DIST);
+    fillLevels = palloc(queryVectorsSize * sizeof(int));
+    for (int i = 0; i < queryVectorsSize; i++) {
+      fillLevels[i] = 0;
+    }
+
+    gettimeofday(&start_query, NULL);
+
+    //DB-Anfrage
+    command = palloc(inputIdsSize * 100 * sizeof(char) + 1000);
+    cur = command;
+    cur += sprintf(cur, "SELECT id, vector FROM %s WHERE id IN (",
+                  vecs_table);
+    for (int i = 0; i < inputIdsSize; i++) {
+      if (i == inputIdsSize - 1) {
+        cur += sprintf(cur, "%d", inputIds[i]);
+      } else {
+        cur += sprintf(cur, "%d,", inputIds[i]);
+      }
+    }
+    sprintf(cur, ")");
+
+    gettimeofday(&end_query, NULL);
+    // elog(INFO, "HAMMING FAST");
+    elog(INFO, "query construction time %f",
+            (end_query.tv_sec * 1000.0 + end_query.tv_usec / 1000.0) - 
+            (start_query.tv_sec * 1000.0 + start_query.tv_usec / 1000.0));
+
+    pfree(inputIds);
+
+    SPI_connect();
+    gettimeofday(&start_database, NULL);
+    // elog(INFO, "command: %s", command);
+    rInfo.ret = SPI_execute(command, true, 0);
+    gettimeofday(&end_database, NULL);
+    elog(INFO, "get vectors from database time %f",
+            (end_database.tv_sec * 1000.0 + end_database.tv_usec / 1000.0) - 
+            (start_database.tv_sec * 1000.0 + start_database.tv_usec / 1000.0));
+    pfree(command);
+    rInfo.proc = SPI_processed;
+    elog(INFO, "retrieved %d results", rInfo.proc);
+
+    if (rInfo.ret > 0 && SPI_tuptable != NULL) {
+      TupleDesc tupdesc = SPI_tuptable->tupdesc;
+      SPITupleTable* tuptable = SPI_tuptable;
+
+      Datum vector_bytea;
+      uint64_t* vector;
+      int wordId;
+      int bitvec_xor;
+      int distance;
+
+      gettimeofday(&start_distances, NULL);
+      for (int targetVectorsIndex = 0; targetVectorsIndex < rInfo.proc; targetVectorsIndex++) {
+        HeapTuple tuple = tuptable->vals[targetVectorsIndex];
+        wordId = DatumGetInt32(SPI_getbinval(tuple, tupdesc, 1, &rInfo.info));
+        vector_bytea = SPI_getbinval(tuple, tupdesc, 2, &rInfo.info);
+        vec_size = 0;
+        convert_bytea_uint64(DatumGetByteaP(vector_bytea), &vector, &vec_size);
+        for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++) {
+          distance = 0;
+          for (int sub = 0; sub < vec_size; sub++) {
+            bitvec_xor = queryVectors[queryVectorsIndex][sub] ^ vector[sub];
+            distance += __builtin_popcountll(bitvec_xor);
+          }
+          if ((float)distance < maxDists[queryVectorsIndex]) {
+            pushTopKList(&topKHeads[queryVectorsIndex], &fillLevels[queryVectorsIndex], (float) distance,
+                    wordId, k, &maxDists[queryVectorsIndex]);
+            maxDists[queryVectorsIndex] = topKTails[queryVectorsIndex]->prev->distance;
+          }
+        }
+      }
+
+      for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++)
+        topKListToArray(&resultTopKs[queryVectorsIndex], topKHeads[queryVectorsIndex], k);
     }
 
     gettimeofday(&end_distances, NULL);
@@ -966,7 +1180,7 @@ Datum hamming_in_batch_fast(PG_FUNCTION_ARGS) {
 
     //return topKs
     usrfctx = (UsrFctxBatch*)palloc(sizeof(UsrFctxBatch));
-    fillUsrFctxBatch(usrfctx, queryIds, queryVectorsSize, topKs, k);
+    fillUsrFctxBatch(usrfctx, queryIds, queryVectorsSize, resultTopKs, k);
     funcctx->user_fctx = (void*)usrfctx;
     outtertupdesc = CreateTemplateTupleDesc(3, false);
 
