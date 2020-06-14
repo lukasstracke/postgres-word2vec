@@ -127,23 +127,36 @@ void initTopKs(TopK** pTopKs, float** pMaxDists, int queryVectorsSize, int k,
   }
 }
 
-void initTopKListEntry(TopKListEntry* pTopK, const float maxDist) {
-  pTopK = palloc(sizeof(TopKListEntry));
-  pTopK -> distance = maxDist;
-  pTopK -> id = -1; 
+TopKListEntry getTopKListEntry(const int id, const float distance) {
+  TopKListEntry topKListEntry;
+  topKListEntry.distance = distance;
+  topKListEntry.id = id;
+  return topKListEntry;
 }
 
 void initTopKLists(TopKListEntry*** pTopKHeads, TopKListEntry*** pTopKTails, float** pMaxDists, 
                 int queryVectorsSize, const float maxDist) {
   *pTopKHeads = palloc(queryVectorsSize * sizeof(TopKListEntry*));
   *pTopKTails = palloc(queryVectorsSize * sizeof(TopKListEntry*));
+  TopKListEntry* heads = palloc(queryVectorsSize * sizeof(TopKListEntry));
+  TopKListEntry* tails = palloc(queryVectorsSize * sizeof(TopKListEntry));
   *pMaxDists = palloc(sizeof(float) * queryVectorsSize);
   for (int i = 0; i < queryVectorsSize; i++) {
-    initTopKListEntry((*pTopKHeads)[i], maxDist);
-    initTopKListEntry((*pTopKTails)[i], maxDist);
+    heads[i] = getTopKListEntry(-1, maxDist);
+    tails[i] = getTopKListEntry(-1, maxDist);
+    (*pTopKHeads)[i] = &heads[i];
+    (*pTopKTails)[i] = &tails[i];
     (*pTopKHeads)[i] -> next = (*pTopKTails)[i];
     (*pTopKTails)[i] -> prev = (*pTopKHeads)[i];
     (*pMaxDists)[i] = maxDist;
+  }
+}
+
+void printList(TopKListEntry* topKList) {
+  while(topKList != NULL) {
+    elog(INFO, "ref: %p, id: %d, dist: %f, prev: %p, next: %p", topKList, topKList -> id, 
+            topKList -> distance, topKList -> prev, topKList -> next);
+    topKList = topKList -> next;
   }
 }
 
@@ -158,19 +171,19 @@ void pushTopKList(TopKListEntry** topKHead, int* fillLevel, float distance,
     listElem = listElem -> next;
     pos++;
   }
-  elog(INFO, "push pos %d", pos);
   newEntry -> prev = listElem -> prev;
   newEntry -> next = listElem;
   listElem -> prev -> next = newEntry;
   listElem -> prev = newEntry;
-  while(listElem -> id > -1) {
+  while(listElem -> next != NULL) {
     listElem = listElem -> next;
     pos++;
   }
   if (pos > k + 1) {
     TopKListEntry* lastElem = listElem -> prev;
     listElem -> prev = lastElem -> prev;
-    pfree(&lastElem);
+    lastElem -> prev -> next = listElem;
+    pfree(lastElem);
   }
   return;
 }

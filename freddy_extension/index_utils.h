@@ -137,10 +137,14 @@ void initTopK(TopK* pTopK, int k, const float maxDist);
 void initTopKs(TopK** pTopKs, float** pMaxDists, int queryVectorsSize, int k,
                const float maxDist);
 
-void initTopKListEntry(TopKListEntry* pTopK, const float maxDist);
+// void initTopKListEntry(TopKListEntry* pTopK, const float maxDist);
+
+TopKListEntry getTopKListEntry(const int id, const float distance);
 
 void initTopKLists(TopKListEntry*** pTopKs, TopKListEntry*** pTopKTails, float** pMaxDists, 
                 int queryVectorsSize, const float maxDist);
+
+void printList(TopKListEntry* topKList);
 
 void pushTopKList(TopKListEntry** topKHead, int* fillLevel, float distance, 
                 int wordId, int k, float* maxDist);
