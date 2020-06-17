@@ -1041,8 +1041,7 @@ Datum hamming_in_batch_list(PG_FUNCTION_ARGS) {
 
     ResultInfo rInfo;
 
-    TopKListEntry** topKHeads;
-    TopKListEntry** topKTails;
+    TopKListEntry** topKLists;
     TopK* resultTopKs;
     float* maxDists;
     int *fillLevels;
@@ -1094,7 +1093,7 @@ Datum hamming_in_batch_list(PG_FUNCTION_ARGS) {
     inputIdsSize = n;
 
     initTopKs(&resultTopKs, &maxDists, queryVectorsSize, k, MAX_DIST);
-    initTopKLists(&topKHeads, &topKTails, &maxDists, queryVectorsSize, MAX_DIST);
+    initTopKLists(&topKLists, &maxDists, queryVectorsSize, MAX_DIST);
     fillLevels = palloc(queryVectorsSize * sizeof(int));
     for (int i = 0; i < queryVectorsSize; i++) {
       fillLevels[i] = 0;
@@ -1160,15 +1159,14 @@ Datum hamming_in_batch_list(PG_FUNCTION_ARGS) {
             distance += __builtin_popcountll(bitvec_xor);
           }
           if ((float)distance < maxDists[queryVectorsIndex]) {
-            pushTopKList(&topKHeads[queryVectorsIndex], &fillLevels[queryVectorsIndex], (float) distance,
+            pushTopKList(&topKLists[queryVectorsIndex], &fillLevels[queryVectorsIndex], (float) distance,
                     wordId, k, &maxDists[queryVectorsIndex]);
-            maxDists[queryVectorsIndex] = topKTails[queryVectorsIndex]->prev->distance;
           }
         }
       }
 
       for (int queryVectorsIndex = 0; queryVectorsIndex < queryVectorsSize; queryVectorsIndex++)
-        topKListToArray(&resultTopKs[queryVectorsIndex], topKHeads[queryVectorsIndex], k);
+        topKListToArray(&resultTopKs[queryVectorsIndex], topKLists[queryVectorsIndex], k);
     }
 
     gettimeofday(&end_distances, NULL);

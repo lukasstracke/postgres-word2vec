@@ -127,63 +127,55 @@ void initTopKs(TopK** pTopKs, float** pMaxDists, int queryVectorsSize, int k,
   }
 }
 
-TopKListEntry getTopKListEntry(const int id, const float distance) {
-  TopKListEntry topKListEntry;
-  topKListEntry.distance = distance;
-  topKListEntry.id = id;
+TopKListEntry* getTopKListEntry(const int id, const float distance) {
+  TopKListEntry* topKListEntry = palloc(sizeof(TopKListEntry));
+  topKListEntry -> distance = distance;
+  topKListEntry -> id = id;
+  topKListEntry -> next = NULL;
   return topKListEntry;
 }
 
-void initTopKLists(TopKListEntry*** pTopKHeads, TopKListEntry*** pTopKTails, float** pMaxDists, 
-                int queryVectorsSize, const float maxDist) {
+void initTopKLists(TopKListEntry*** pTopKHeads, float** pMaxDists, int queryVectorsSize, const float maxDist) {
   *pTopKHeads = palloc(queryVectorsSize * sizeof(TopKListEntry*));
-  *pTopKTails = palloc(queryVectorsSize * sizeof(TopKListEntry*));
-  TopKListEntry* heads = palloc(queryVectorsSize * sizeof(TopKListEntry));
-  TopKListEntry* tails = palloc(queryVectorsSize * sizeof(TopKListEntry));
+  TopKListEntry** heads = palloc(queryVectorsSize * sizeof(TopKListEntry*));
   *pMaxDists = palloc(sizeof(float) * queryVectorsSize);
   for (int i = 0; i < queryVectorsSize; i++) {
-    heads[i] = getTopKListEntry(-1, maxDist);
-    tails[i] = getTopKListEntry(-1, maxDist);
-    (*pTopKHeads)[i] = &heads[i];
-    (*pTopKTails)[i] = &tails[i];
-    (*pTopKHeads)[i] -> next = (*pTopKTails)[i];
-    (*pTopKTails)[i] -> prev = (*pTopKHeads)[i];
+    heads[i] = getTopKListEntry(-1, -1);
+    (*pTopKHeads)[i] = heads[i];
     (*pMaxDists)[i] = maxDist;
   }
 }
 
 void printList(TopKListEntry* topKList) {
   while(topKList != NULL) {
-    elog(INFO, "ref: %p, id: %d, dist: %f, prev: %p, next: %p", topKList, topKList -> id, 
-            topKList -> distance, topKList -> prev, topKList -> next);
+    elog(INFO, "ref: %p, id: %d, dist: %f, next: %p", topKList, topKList -> id, 
+            topKList -> distance, topKList -> next);
     topKList = topKList -> next;
   }
 }
 
 void pushTopKList(TopKListEntry** topKHead, int* fillLevel, float distance, 
                 int wordId, int k, float* maxDist) {
-  TopKListEntry* newEntry = palloc(sizeof(TopKListEntry));
-  newEntry -> distance = distance;
-  newEntry -> id = wordId;
-  int pos = 0;
-  TopKListEntry* listElem = (*topKHead) -> next;
-  while(pos < k && distance > (listElem -> distance)) {
+  TopKListEntry* newEntry = getTopKListEntry(wordId, distance);
+  TopKListEntry* listElem = *topKHead;
+  while((listElem -> next) != NULL && distance > (listElem -> next -> distance))
     listElem = listElem -> next;
-    pos++;
-  }
-  newEntry -> prev = listElem -> prev;
-  newEntry -> next = listElem;
-  listElem -> prev -> next = newEntry;
-  listElem -> prev = newEntry;
-  while(listElem -> next != NULL) {
-    listElem = listElem -> next;
-    pos++;
-  }
-  if (pos > k + 1) {
-    TopKListEntry* lastElem = listElem -> prev;
-    listElem -> prev = lastElem -> prev;
-    lastElem -> prev -> next = listElem;
+  newEntry -> next = listElem -> next;
+  listElem -> next = newEntry;
+  (*fillLevel)++;
+  if ((*fillLevel) > k) {
+    while(listElem -> next -> next != NULL)
+      listElem = listElem -> next;
+    TopKListEntry* lastElem = listElem -> next;
+    listElem -> next = NULL;
     pfree(lastElem);
+    (*maxDist) = listElem -> distance;
+    return;
+  }
+  if ((*fillLevel) == k - 1) {
+    while(listElem -> next != NULL)
+      listElem = listElem -> next;
+    (*maxDist) = listElem -> distance;
   }
   return;
 }

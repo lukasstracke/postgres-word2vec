@@ -23,7 +23,6 @@ typedef struct TopKListEntry {
   int id;
   float distance;
   struct TopKListEntry* next;
-  struct TopKListEntry* prev;
 } TopKListEntry;
 
 typedef struct TopKWordEntry {
@@ -125,7 +124,8 @@ void updateTopK(TopK tk, float distance, int id, int k, int maxDist);
 
 void sortTopK(TopK tk, int first, int last, int k);
 
-void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance, int id, int k, float* maxDist, int* sortcount);
+void updateTopKFast(TopK tk, const int batchSize, int* fillLevel, float distance, 
+                    int id, int k, float* maxDist, int* sortcount);
 
 void updateTopKPV(TopKPV tk, float distance, int id, int k, int maxDist,
                   float4* vector, int dim);
@@ -137,17 +137,15 @@ void initTopK(TopK* pTopK, int k, const float maxDist);
 void initTopKs(TopK** pTopKs, float** pMaxDists, int queryVectorsSize, int k,
                const float maxDist);
 
-// void initTopKListEntry(TopKListEntry* pTopK, const float maxDist);
+TopKListEntry* getTopKListEntry(const int id, const float distance);
 
-TopKListEntry getTopKListEntry(const int id, const float distance);
-
-void initTopKLists(TopKListEntry*** pTopKs, TopKListEntry*** pTopKTails, float** pMaxDists, 
-                int queryVectorsSize, const float maxDist);
+void initTopKLists(TopKListEntry*** pTopKs, float** pMaxDists, int queryVectorsSize, 
+                   const float maxDist);
 
 void printList(TopKListEntry* topKList);
 
 void pushTopKList(TopKListEntry** topKHead, int* fillLevel, float distance, 
-                int wordId, int k, float* maxDist);
+                 int wordId, int k, float* maxDist);
 
 void topKListToArray(TopK* topKArray, TopKListEntry* topKListHead, int k);
 
