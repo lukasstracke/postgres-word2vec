@@ -137,7 +137,7 @@ void initTopK(TopK* pTopK, int k, const float maxDist);
 void initTopKs(TopK** pTopKs, float** pMaxDists, int queryVectorsSize, int k,
                const float maxDist);
 
-TopKListEntry* getTopKListEntry(const int id, const float distance);
+TopKListEntry* createTopKListEntry(const int id, const float distance);
 
 void initTopKLists(TopKListEntry*** pTopKs, float** pMaxDists, int queryVectorsSize, 
                    const float maxDist);
