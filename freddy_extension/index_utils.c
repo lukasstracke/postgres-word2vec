@@ -165,21 +165,17 @@ void pushTopKList(TopKListEntry** topKHead, int* fillLevel, float distance,
   TopKListEntry* newEntry = palloc(sizeof(TopKListEntry));
   newEntry -> distance = distance;
   newEntry -> id = wordId;
-  int pos = 0;
   TopKListEntry* listElem = (*topKHead) -> next;
-  while(pos < k && distance > (listElem -> distance)) {
+  while (distance > (listElem -> distance))
     listElem = listElem -> next;
-    pos++;
-  }
   newEntry -> prev = listElem -> prev;
   newEntry -> next = listElem;
   listElem -> prev -> next = newEntry;
   listElem -> prev = newEntry;
-  while(listElem -> next != NULL) {
-    listElem = listElem -> next;
-    pos++;
-  }
-  if (pos > k + 1) {
+  (*fillLevel)++;
+  if ((*fillLevel) > k) {
+    while (listElem -> next != NULL)
+      listElem = listElem -> next;
     TopKListEntry* lastElem = listElem -> prev;
     listElem -> prev = lastElem -> prev;
     lastElem -> prev -> next = listElem;
