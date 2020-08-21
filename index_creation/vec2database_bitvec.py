@@ -14,7 +14,7 @@ def init_tables(con, cur, table_name, logger):
     query_clear = "DROP TABLE IF EXISTS " + table_name + ";"
     result = cur.execute(query_clear)
     con.commit()
-    logger.log(Logger.INFO, 'Exexuted DROP TABLE on ' + table_name)
+    logger.log(Logger.INFO, 'Executed DROP TABLE on ' + table_name)
 
     # create table
     query_create_table = "CREATE TABLE " + table_name + " (id serial PRIMARY KEY, word varchar(100), vector bytea);"
