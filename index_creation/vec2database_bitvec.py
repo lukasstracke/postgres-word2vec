@@ -102,6 +102,11 @@ def main(argc, argv):
     if port != "":
         args = args + " port='" + port + "'"
 
+    vec_file_path = vec_config.get_value('vec_file_path')
+    table_name = vec_config.get_value('table_name')
+    batch_size = db_config.get_value('batch_size')
+    insert_limit = vec_config.get_value('insert_limit') if vec_config.has_key('insert_limit') else -1
+
     # init db connection
     try:        
         con = psycopg2.connect(args)
@@ -114,7 +119,7 @@ def main(argc, argv):
 
     init_tables(con, cur, vec_config.get_value('table_name'), logger)
 
-    insert_vectors(vec_config.get_value('vec_file_path'), con, cur, vec_config.get_value('table_name'), db_config.get_value('batch_size'), vec_config.get_value('insert_limit'), logger)
+    insert_vectors(vec_file_path, con, cur, table_name, batch_size, insert_limit, logger)
 
     # commit changes
     con.commit()
