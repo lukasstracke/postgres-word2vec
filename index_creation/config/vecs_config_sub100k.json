@@ -1,0 +1,8 @@
+{
+    "table_name": "word2bits_float_sub100k",
+    "index_name": "word2bits_float_sub100k_word_idx",
+    "vec_file_path": "../vectors/w2b_bitlevel1_size800_vocab3.7M",
+    "insert_limit": 100000,
+    "normalized": false
+  }
+  
