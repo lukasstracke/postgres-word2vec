@@ -54,7 +54,7 @@ def serialize_as_norm_array(array):
         output += str(elem / length) + ','
     return output[:-1] + '}'
 
-def insert_vectors(filename, con, cur, table_name, batch_size, normalized, logger):
+def insert_vectors(filename, con, cur, table_name, batch_size, insert_limit, normalized, logger):
     f = open(filename, encoding='utf-8')
     (_, size) = f.readline().split()
     d = int(size)
@@ -63,26 +63,30 @@ def insert_vectors(filename, con, cur, table_name, batch_size, normalized, logge
     values = []
     while line:
         splits = line.split()
-        vector = None
+        words = [x for x in splits if '0.33333' not in x]
+        word = ' '.join(words)
+        vector = [x for x in splits if x not in words]
+        vec_len = len(vector)
         if normalized:
-            vector = serialize_as_norm_array(splits[1:])
+            vector = serialize_as_norm_array(vector)
         else:
-            vector = serialize_array(splits[1:])
-        if (len(splits[0]) < 100) and (vector != None) and (len(splits) == (d + 1)):
+            vector = serialize_array(vector)
+        if (len(word.encode('utf-8')) < 100) and (vector != None) and (vec_len == d):
             values.append({"word": splits[0], "vector": vector})
+            if count % batch_size == 0:
+                if USE_BYTEA_TYPE:
+                    cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, vec_to_bytea(%(vector)s::float4[]))", tuple(values))
+                else:
+                    cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(vector)s)", tuple(values))
+                con.commit()
+                logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
+                values = []
+            count+= 1
         else:
             logger.log(Logger.WARNING, 'parsing problem with ' + line)
-            count -= 1
-        if count % batch_size == 0:
-            if USE_BYTEA_TYPE:
-                cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, vec_to_bytea(%(vector)s::float4[]))", tuple(values))
-            else:
-                cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(vector)s)", tuple(values))
-            con.commit()
-            logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
-            values = []
+        if count-1 == insert_limit:
+            break
 
-        count+= 1
         line = f.readline()
 
     if USE_BYTEA_TYPE:
@@ -115,6 +119,8 @@ def main(argc, argv):
     if port != "":
         args = args + " port='" + port + "'"
 
+    insert_limit = vec_config.get_value('insert_limit') if vec_config.has_key('insert_limit') else -1
+
     # init db connection
     try:        
         con = psycopg2.connect(args)
@@ -127,7 +133,7 @@ def main(argc, argv):
 
     init_tables(con, cur, vec_config.get_value('table_name'), logger)
 
-    insert_vectors(vec_config.get_value('vec_file_path'), con, cur, vec_config.get_value('table_name'), db_config.get_value('batch_size'), vec_config.get_value('normalized'), logger)
+    insert_vectors(vec_config.get_value('vec_file_path'), con, cur, vec_config.get_value('table_name'), db_config.get_value('batch_size'), insert_limit, vec_config.get_value('normalized'), logger)
 
     # commit changes
     con.commit()
