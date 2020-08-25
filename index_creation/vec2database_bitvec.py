@@ -2,6 +2,7 @@
 
 import sys
 import psycopg2
+from psycopg2 import extras
 import time
 import numpy as np
 
@@ -56,11 +57,10 @@ def insert_vectors(filename, con, cur, table_name, batch_size, insert_limit, log
         # print(floatvec)
         bitvec = float_to_bitvec(floatvec)
         if (len(word.encode('utf-8')) < 100) and (bitvec != None) and (len(floatvec) == d):
-            values.append({"word": word, "bitvec": bitvec})
+            values.append((word, bitvec));
             if count % batch_size == 0:
                 try:
-                    cur.executemany("INSERT INTO "+ table_name + " (word,vector) VALUES (%(word)s, %(bitvec)s)", tuple(values))
-                    con.commit()
+                    extras.execute_values(cur, "INSERT INTO " + table_name + " (word,vector) VALUES %s", values)
                     if count % 1000 == 0:
                         logger.log(Logger.INFO, 'Inserted ' + str(count-1) + ' vectors')
                     values = []
