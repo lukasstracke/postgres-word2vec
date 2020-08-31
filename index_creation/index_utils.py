@@ -6,7 +6,7 @@ import psycopg2
 from logger import *
 
 def get_vectors(filename, logger, max_count=10**9, normalization=True):
-    f = open(filename)
+    f = open(filename, encoding='utf-8')
     line_splits = f.readline().split()
     logger.log(Logger.INFO, str(line_splits))
     size = int(line_splits[0])

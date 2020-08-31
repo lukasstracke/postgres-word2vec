@@ -178,15 +178,26 @@ def main(argc, argv):
         # save codebook to file (optional)
         qcreator.store_quantizer(codebook, 'codebook.pcl')
 
+    user = db_config.get_value('username')
+    password = db_config.get_value('password')
+    host = db_config.get_value('host')
+    db_name = db_config.get_value('db_name')
+    port = db_config.get_value('port')
+
+    args = "dbname='" + db_name + "' user='" + user + "' host='" + host + "' password='" + password + "'"
+    if port != "":
+        args = args + " port='" + port + "'"
+
     con = None
     cur = None
     if (index_config.get_value('add_to_database')):
         # create db connection
         try:
-            con = psycopg2.connect("dbname='" +  db_config.get_value('db_name') + "' user='" +  db_config.get_value('username') + "' host='" +  db_config.get_value('host') + "' password='" +  db_config.get_value('password') + "'")
+            con = psycopg2.connect(args)
         except:
             logger.log(Logger.ERROR, 'Can not connect to database')
             return
+        con.set_client_encoding('UTF8')
         cur = con.cursor()
 
         utils.init_tables(con, cur, get_table_information(index_config), logger)
